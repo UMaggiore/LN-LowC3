@@ -46,7 +46,7 @@ library(JMbayes2)
 
 ### ADJUSTED ANALYSES
 
-## ADJUSTED COX WITH TIME-VARYING PH REGRESSION ANALYSIS INCLUDING eGFR
+## ADJUSTED COX PH REGRESSION ANALYSIS WITH TIME-VARYING eGFR
 ```{r}
 Stand.TV.CoxFit <- coxph(Surv(tstart, tstop, status) ~ LOWC3 + eGFR +
 	ageatbiopsy + sex +  black + hypertension + mmf + cyc, 
@@ -63,7 +63,7 @@ lmeFit.rs.sle <- lme(eGFR ~ LOWC3 + time +
 summary(lmeFit.rs.sle)
 ```
 
-## ADJUSTED COX WITH TIME-VARYING PH REGRESSION ANALYSIS NOT INCLUDING eGFR
+## ADJUSTED COX PH REGRESSION ANALYSIS NOT INCLUDING eGFR
 ```{r }
 CoxFit <- coxph(Surv(tstart, tstop, status) ~ LOWC3 + 
 	ageatbiopsy + sex +  black + hypertension + mmf + cyc, 
@@ -100,8 +100,7 @@ summary(jointFit)
 ```{r }
 summary(jointFit1)
 ```
-## ADJUSTED JOINT LONGITUDINAL SURVIVAL ANALYSIS - normalized
-area/cumulative-effect eGFR
+## ADJUSTED JOINT LONGITUDINAL SURVIVAL ANALYSIS - normalized area/cumulative-effect eGFR
 ```{r }
 summary(jointFit2)
 ```
@@ -110,7 +109,7 @@ summary(jointFit2)
 compare_jm(jointFit,jointFit1, jointFit2)
 ```
 
-# CALCULATE P values and 95% cridible intervals
+# DISPLAY COMPACT P values and 95% credible intervals
 ```{r }
 jmb2.ci.p <- function(x, times = 1) {
 		b.m <-  mean(c.all)
@@ -132,8 +131,7 @@ jmb2.ci.p <- function(x, times = 1) {
 ## ESTIMATES FROM THE MODELS - current value - adjusted
 ```{r }
 b <- coef(jointFit)
-b$gammas["LOWC31"]
-b$association
+b
 ```	
 
 # reproducing JMbayes2 output - current value - adjusted
@@ -160,8 +158,7 @@ jmb2.ci.p(c.all, times = -10)
 ## ESTIMATES FROM THE MODELS - slope eGFR - adjusted
 ```{r }
 b <- coef(jointFit1)
-b$gammas["LOWC31"]
-b$association
+b
 ```	
 
 # calculations: reproducing JMbayes2 output - slope eGFR - adjusted
@@ -184,11 +181,10 @@ c.all <- c(c.1,c.2,c.3,c.4)
 jmb2.ci.p(c.all, times = 1)
 ```	
 
-## ESTIMATES FROM THE MODELS - normalized area/cumulative-effect eGFR - adjusted
+## ESTIMATES FROM THE MODELS - normalized area/cumulative-effect eGFR-adjusted
 ```{r }
 b <- coef(jointFit2)
-b$gammas["LOWC31"]
-b$association
+b
 ```	
 
 # calculations: reproducing JMbayes2 output - normalized area/cumulative-effect eGFR -adjusted
@@ -218,19 +214,19 @@ lmeFit.rs.sle <- lme(eGFR ~ LOWC3 + time,
 	random = ~ 1 + time | id, data = sle_05_long)
 ```	
 
-## CRUDE COX WITH TIME-VARYING PH REGRESSION ANALYSIS
+## CRUDE COX PH REGRESSION ANALYSIS
 ```{r }
 CoxFit <- coxph(Surv(tstart, tstop, status) ~ LOWC3, 
 	data = sle_05_time_varying, cluster = id)
 ```	
 
-## CRUDE COX WITH TIME-VARYING PH REGRESSION ANALYSIS INCLUDING eGFR
+## CRUDE COX PH REGRESSION ANALYSIS WITH TIME-VARYING eGFR
 ```{r }
 Stand.TV.CoxFit <- coxph(Surv(tstart, tstop, status) ~ LOWC3 + eGFR, 
 	data = sle_05_time_varying, cluster = id)
 ```	
 
-## ADJUSTED COX WITH TIME-VARYING PH REGRESSION ANALYSIS NOT INCLUDING eGFR
+## ADJUSTED COX PH REGRESSION ANALYSIS NOT INCLUDING eGFR
 ```{r }
 CoxAFit <- coxph(Surv(tstart, tstop, status) ~ LOWC3 + mmf + ageatbiopsy + sex +  black + hypertension, 
 	data = sle_05_time_varying, cluster = id)
@@ -240,7 +236,7 @@ CoxAFit <- coxph(Surv(tstart, tstop, status) ~ LOWC3 + mmf + ageatbiopsy + sex +
 ```{r }
 summary(CoxFit)
 ```	
-## stabdard Cox PH model adjusted
+## standard Cox PH model adjusted
 ```{r }
 summary(CoxAFit)
 ```	
@@ -273,13 +269,12 @@ summary(jointCFit)
 ```{r }
 summary(jointCFit1)
 ```	
-## CRUDE JOINT LONGITUDINAL SURVIVAL ANALYSIS - normalized
-area/cumulative-effect eGFR
+## CRUDE JOINT LONGITUDINAL SURVIVAL ANALYSIS - normalized area/cumulative-effect eGFR
 ```{r}
 summary(jointCFit2)
 ```	
 
-# CALCULATE P values and 95% cridible intervals
+# DISPLAY COMPACT P values and 95% credible intervals
 ```{r }
 jmb2.ci.p <- function(x, times = 1) {
 		b.m <-  mean(c.all)
@@ -303,8 +298,7 @@ jmb2.ci.p <- function(x, times = 1) {
 ## ESTIMATES FROM THE MODELS - current value - crude
 ```{r }
 b <- coef(jointCFit)
-b$gammas["LOWC31"]
-b$association
+b
 ```
 
 # calculations: reproducing JMbayes2 output - current value - crude
@@ -331,8 +325,7 @@ jmb2.ci.p(c.all, times = -10)
 ## ESTIMATES FROM THE MODELS - slope eGFR - crude
 ```{r }
 b <- coef(jointCFit1)
-b$gammas["LOWC31"]
-b$association
+b
 ```
 
 # calculations: reproducing JMbayes2 output - slope eGFR - crude
@@ -358,12 +351,11 @@ jmb2.ci.p(c.all, times = 1)
 ## ESTIMATES FROM THE MODELS - normalized area/cumulative-effect eGFR - crude
 ```{r }
 b <- coef(jointCFit2)
-b$gammas["LOWC31"]
-b$association
+b
 ```
 
 
-# calculations: reproducing JMbayes2 output - normalized area/cumulative-effect eGFR
+#calculations: reproducing JMbayes2 output - normalized area/cumulative-effect eGFR
 ```{r }
 c.1 <- jointCFit2$mcmc[[3]][[1]][,1]
 c.2 <- jointCFit2$mcmc[[3]][[2]][,1]
