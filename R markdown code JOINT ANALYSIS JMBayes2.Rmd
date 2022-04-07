@@ -1,0 +1,477 @@
+---
+title: "JOINT ANALYSES SLE PI-LowC3 AND OUTCOME"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### JOIN ANALYSES WITH R RANDOM COEFFICIENT - JMBayes2 R package
+
+
+
+```{r}
+rm( list=ls() )
+setwd("C:/Documenti/Manenti/LES/JOHNS HOPKINS")
+library(haven)
+library(tidyverse)
+sle_status_cross_sectional <- read_dta("sle_status_cross_sectional.dta")
+sle_05_long <- read_dta("sle_05_long.dta")
+sle_05_time_varying <- read_dta("sle_05_time_varying.dta")
+```
+
+
+# JMbayes2 require that all datset are sorted by id
+```{r}
+sle_status_cross_sectional <- sle_status_cross_sectional %>% 
+  mutate(id = as.numeric(id)) %>% 
+  arrange(id)
+sle_05_long <- sle_05_long %>% 
+  mutate(id = as.numeric(id)) %>% 
+  arrange(id)
+sle_05_time_varying <- sle_05_time_varying %>% 
+  mutate(id = as.numeric(id)) %>% 
+  arrange(id)
+sle_05_long$LOWC3 <- as.factor(sle_05_long$LOWC3)
+sle_status_cross_sectional$LOWC3 <- as.factor(sle_status_cross_sectional$LOWC3)
+sle_05_time_varying$LOWC3 <- as.factor(sle_05_time_varying$LOWC3)
+```
+
+### ANALYSES WITH JMbayes2
+```{r }
+options(scipen=999)
+library(JMbayes2)
+```
+
+### ADJUSTED ANALYSES
+
+## ADJUSTED COX WITH TIME-VARYING PH REGRESSION ANALYSIS INCLUDING eGFR
+```{r}
+Stand.TV.CoxFit <- coxph(Surv(tstart, tstop, status) ~ LOWC3 + eGFR +
+	ageatbiopsy + sex +  black + hypertension + mmf + cyc, 
+	data = sle_05_time_varying, cluster = id)
+summary(Stand.TV.CoxFit)
+```
+
+
+## ADJUSTED LONGITUDINAL ANALYSIS - random slope regression
+```{r }
+lmeFit.rs.sle <- lme(eGFR ~ LOWC3 + time +
+	ageatbiopsy + sex + black + hypertension + mmf + cyc, 
+	random = ~ 1 + time | id, control = lmeControl(opt = 'optim'), data = sle_05_long)
+summary(lmeFit.rs.sle)
+```
+
+## ADJUSTED COX WITH TIME-VARYING PH REGRESSION ANALYSIS NOT INCLUDING eGFR
+```{r }
+CoxFit <- coxph(Surv(tstart, tstop, status) ~ LOWC3 + 
+	ageatbiopsy + sex +  black + hypertension + mmf + cyc, 
+	data = sle_05_time_varying, cluster = id)
+summary(CoxFit)
+```
+
+## with eGFR current value
+```{r }
+jointFit <- jm(CoxFit, lmeFit.rs.sle, time_var = "time", n_chains = 4L, n_thin = 50, n_iter = 10000, data_Surv = sle_05_time_varying )
+```
+
+## with eGFR slope
+```{r }
+fForms <- list(
+  "eGFR" = ~ slope(eGFR) 
+)
+jointFit1 <- update(jointFit, functional_forms = fForms)
+```
+
+## with eGFR AUC
+```{r, message=FALSE, warning = FALSE }
+fForms <- list(
+     "eGFR" = ~ area(eGFR)
+	 )
+jointFit2 <- update(jointFit, functional_forms = fForms)
+```
+
+## ADJUSTED JOINT LONGITUDINAL SURVIVAL ANALYSIS - current eGFR value
+```{r }
+summary(jointFit)
+```
+## ADJUSTED JOINT LONGITUDINAL SURVIVAL ANALYSIS - slope eGFR
+```{r }
+summary(jointFit1)
+```
+## ADJUSTED JOINT LONGITUDINAL SURVIVAL ANALYSIS - normalized
+area/cumulative-effect eGFR
+```{r }
+summary(jointFit2)
+```
+## COMPARE MODELS - ADJUSTED
+```{r }
+compare_jm(jointFit,jointFit1, jointFit2)
+```
+
+# CALCULATE P values and 95% cridible intervals
+```{r }
+jmb2.ci.p <- function(x, times = 1) {
+		b.m <-  mean(c.all)
+		b.sd <- sd(c.all)
+		b.ci <- quantile(c.all, probs = c(0.025, 0.975))
+		tw <- c(mean(c.all <= 0), mean(c.all >= 0))
+		prob.not = min(tw)
+	    p <- 2 * prob.not
+		hr <- exp(mean(c.all) * times)
+	    ci <- exp(quantile(c.all, probs = c(0.025, 0.975)) * times)
+		if (ci[2] < ci[1]) {
+	    cat("HR: ", round(hr,2), "(95%CI: ", round(ci[2],2), " to ", round(ci[1],2), "; P= ", round(p, 4) , ")\n")
+		} else {
+		cat("HR: ", round(hr,2), "(95%CI: ", round(ci[1],2), " to ", round(ci[2],2), "; P= ", round(p, 4) , ")\n")
+		}
+	}
+```	
+
+## ESTIMATES FROM THE MODELS - current value - adjusted
+```{r }
+b <- coef(jointFit)
+b$gammas["LOWC31"]
+b$association
+```	
+
+# reproducing JMbayes2 output - current value - adjusted
+```{r }
+c.1 <- jointFit$mcmc[[3]][[1]][,1]
+c.2 <- jointFit$mcmc[[3]][[2]][,1]
+c.3 <- jointFit$mcmc[[3]][[3]][,1]
+c.4 <- jointFit$mcmc[[3]][[4]][,1]
+c.all <- c(c.1,c.2,c.3,c.4)
+jmb2.ci.p(c.all)
+```	
+
+# calculation association parameter (per 10mL/min/1.73m2 decrease) - current value -adjusted
+```{r }
+c.1 <- jointFit$mcmc[[4]][[1]]
+c.2 <- jointFit$mcmc[[4]][[2]]
+c.3 <- jointFit$mcmc[[4]][[3]]
+c.4 <- jointFit$mcmc[[4]][[4]]
+c.all <- c(c.1,c.2,c.3,c.4)
+jmb2.ci.p(c.all, times = -10)
+```	
+
+
+## ESTIMATES FROM THE MODELS - slope eGFR - adjusted
+```{r }
+b <- coef(jointFit1)
+b$gammas["LOWC31"]
+b$association
+```	
+
+# calculations: reproducing JMbayes2 output - slope eGFR - adjusted
+```{r }
+c.1 <- jointFit1$mcmc[[3]][[1]][,1]
+c.2 <- jointFit1$mcmc[[3]][[2]][,1]
+c.3 <- jointFit1$mcmc[[3]][[3]][,1]
+c.4 <- jointFit1$mcmc[[3]][[4]][,1]
+c.all <- c(c.1,c.2,c.3,c.4)
+jmb2.ci.p(c.all)
+```	
+
+# calculation association parameter (per 10mL/min/1.73m2 decrease) - slope eGFR - adjusted
+```{r }
+c.1 <- jointFit1$mcmc[[4]][[1]]
+c.2 <- jointFit1$mcmc[[4]][[2]]
+c.3 <- jointFit1$mcmc[[4]][[3]]
+c.4 <- jointFit1$mcmc[[4]][[4]]
+c.all <- c(c.1,c.2,c.3,c.4)
+jmb2.ci.p(c.all, times = 1)
+```	
+
+## ESTIMATES FROM THE MODELS - normalized area/cumulative-effect eGFR - adjusted
+```{r }
+b <- coef(jointFit2)
+b$gammas["LOWC31"]
+b$association
+```	
+
+# calculations: reproducing JMbayes2 output - normalized area/cumulative-effect eGFR -adjusted
+```{r }
+c.1 <- jointFit2$mcmc[[3]][[1]][,1]
+c.2 <- jointFit2$mcmc[[3]][[2]][,1]
+c.3 <- jointFit2$mcmc[[3]][[3]][,1]
+c.4 <- jointFit2$mcmc[[3]][[4]][,1]
+c.all <- c(c.1,c.2,c.3,c.4)
+jmb2.ci.p(c.all)
+```	
+
+# calculation association parameter (per 10mL/min/1.73m2 decrease) - normalized area/cumulative-effect eGFR - adjusted
+```{r }
+c.1 <- jointFit2$mcmc[[4]][[1]]
+c.2 <- jointFit2$mcmc[[4]][[2]]
+c.3 <- jointFit2$mcmc[[4]][[3]]
+c.4 <- jointFit2$mcmc[[4]][[4]]
+c.all <- c(c.1,c.2,c.3,c.4)
+jmb2.ci.p(c.all, times = -10)
+```	
+
+### CRUDE ANALYSES
+## CRUDE LONGITUDINAL ANALYSIS - random slope regression
+```{r }
+lmeFit.rs.sle <- lme(eGFR ~ LOWC3 + time, 
+	random = ~ 1 + time | id, data = sle_05_long)
+```	
+
+## CRUDE COX WITH TIME-VARYING PH REGRESSION ANALYSIS
+```{r }
+CoxFit <- coxph(Surv(tstart, tstop, status) ~ LOWC3, 
+	data = sle_05_time_varying, cluster = id)
+```	
+
+## CRUDE COX WITH TIME-VARYING PH REGRESSION ANALYSIS INCLUDING eGFR
+```{r }
+Stand.TV.CoxFit <- coxph(Surv(tstart, tstop, status) ~ LOWC3 + eGFR, 
+	data = sle_05_time_varying, cluster = id)
+```	
+
+## ADJUSTED COX WITH TIME-VARYING PH REGRESSION ANALYSIS NOT INCLUDING eGFR
+```{r }
+CoxAFit <- coxph(Surv(tstart, tstop, status) ~ LOWC3 + mmf + ageatbiopsy + sex +  black + hypertension, 
+	data = sle_05_time_varying, cluster = id)
+```	
+	
+## stardard Cox PH model crude
+```{r }
+summary(CoxFit)
+```	
+## stabdard Cox PH model adjusted
+```{r }
+summary(CoxAFit)
+```	
+## with eGFR current value - crude
+```{r, message=FALSE, warning = FALSE }
+jointCFit <- jm(CoxFit, lmeFit.rs.sle, time_var = "time", n_chains = 4L, n_thin = 50, n_iter = 10000, data_Surv = sle_05_time_varying )
+```	
+
+## with eGFR slope - crude
+```{r }
+fForms <- list(
+  "eGFR" = ~ slope(eGFR) 
+)
+jointCFit1 <- update(jointCFit, functional_forms = fForms)
+```	
+
+## with eGFR AUC  - crude
+```{r }
+fForms <- list(
+     "eGFR" = ~ area(eGFR)
+	 )
+jointCFit2 <- update(jointCFit, functional_forms = fForms)
+```	
+
+## CRUDE JOINT LONGITUDINAL SURVIVAL ANALYSIS - current eGFR value
+```{r }
+summary(jointCFit)
+```	
+## CRUDE JOINT LONGITUDINAL SURVIVAL ANALYSIS - slope eGFR
+```{r }
+summary(jointCFit1)
+```	
+## CRUDE JOINT LONGITUDINAL SURVIVAL ANALYSIS - normalized
+area/cumulative-effect eGFR
+```{r}
+summary(jointCFit2)
+```	
+
+# CALCULATE P values and 95% cridible intervals
+```{r }
+jmb2.ci.p <- function(x, times = 1) {
+		b.m <-  mean(c.all)
+		b.sd <- sd(c.all)
+		b.ci <- quantile(c.all, probs = c(0.025, 0.975))
+		tw <- c(mean(c.all <= 0), mean(c.all >= 0))
+		prob.not = min(tw)
+	    p <- 2 * prob.not
+		hr <- exp(mean(c.all) * times)
+	    ci <- exp(quantile(c.all, probs = c(0.025, 0.975)) * times)
+		if (ci[2] < ci[1]) {
+	    cat("HR: ", round(hr,2), "(95%CI: ", round(ci[2],2), " to ", round(ci[1],2), "; P= ", round(p, 4) , ")\n")
+		} else {
+		cat("HR: ", round(hr,2), "(95%CI: ", round(ci[1],2), " to ", round(ci[2],2), "; P= ", round(p, 4) , ")\n")
+		}
+	}
+```		
+
+
+
+## ESTIMATES FROM THE MODELS - current value - crude
+```{r }
+b <- coef(jointCFit)
+b$gammas["LOWC31"]
+b$association
+```
+
+# calculations: reproducing JMbayes2 output - current value - crude
+```{r }
+c.1 <- jointCFit$mcmc[[3]][[1]][,1]
+c.2 <- jointCFit$mcmc[[3]][[2]][,1]
+c.3 <- jointCFit$mcmc[[3]][[3]][,1]
+c.4 <- jointCFit$mcmc[[3]][[4]][,1]
+c.all <- c(c.1,c.2,c.3,c.4)
+jmb2.ci.p(c.all)
+```
+
+# calculation association parameter (per 10mL/min/1.73m2 decrease) - current value - crude
+```{r }
+c.1 <- jointCFit$mcmc[[4]][[1]]
+c.2 <- jointCFit$mcmc[[4]][[2]]
+c.3 <- jointCFit$mcmc[[4]][[3]]
+c.4 <- jointCFit$mcmc[[4]][[4]]
+c.all <- c(c.1,c.2,c.3,c.4)
+jmb2.ci.p(c.all, times = -10)
+```
+
+
+## ESTIMATES FROM THE MODELS - slope eGFR - crude
+```{r }
+b <- coef(jointCFit1)
+b$gammas["LOWC31"]
+b$association
+```
+
+# calculations: reproducing JMbayes2 output - slope eGFR - crude
+```{r }
+c.1 <- jointCFit1$mcmc[[3]][[1]][,1]
+c.2 <- jointCFit1$mcmc[[3]][[2]][,1]
+c.3 <- jointCFit1$mcmc[[3]][[3]][,1]
+c.4 <- jointCFit1$mcmc[[3]][[4]][,1]
+c.all <- c(c.1,c.2,c.3,c.4)
+jmb2.ci.p(c.all)
+```
+
+# calculation association parameter (per 10mL/min/1.73m2 decrease) - slope eGFR - crude
+```{r }
+c.1 <- jointCFit1$mcmc[[4]][[1]]
+c.2 <- jointCFit1$mcmc[[4]][[2]]
+c.3 <- jointCFit1$mcmc[[4]][[3]]
+c.4 <- jointCFit1$mcmc[[4]][[4]]
+c.all <- c(c.1,c.2,c.3,c.4)
+jmb2.ci.p(c.all, times = 1)
+```
+
+## ESTIMATES FROM THE MODELS - normalized area/cumulative-effect eGFR - crude
+```{r }
+b <- coef(jointCFit2)
+b$gammas["LOWC31"]
+b$association
+```
+
+
+# calculations: reproducing JMbayes2 output - normalized area/cumulative-effect eGFR
+```{r }
+c.1 <- jointCFit2$mcmc[[3]][[1]][,1]
+c.2 <- jointCFit2$mcmc[[3]][[2]][,1]
+c.3 <- jointCFit2$mcmc[[3]][[3]][,1]
+c.4 <- jointCFit2$mcmc[[3]][[4]][,1]
+c.all <- c(c.1,c.2,c.3,c.4)
+jmb2.ci.p(c.all)
+```
+
+# calculation association parameter (per 10mL/min/1.73m2 decrease) - normalized area/cumulative-effect eGFR - crude
+```{r }
+c.1 <- jointCFit2$mcmc[[4]][[1]]
+c.2 <- jointCFit2$mcmc[[4]][[2]]
+c.3 <- jointCFit2$mcmc[[4]][[3]]
+c.4 <- jointCFit2$mcmc[[4]][[4]]
+c.all <- c(c.1,c.2,c.3,c.4)
+jmb2.ci.p(c.all, times = -10)
+```
+
+
+## COMPARE MODELS - ADJUSTED AND CRUDE
+```{r }
+compare_jm(jointFit,jointFit1, jointFit2)
+compare_jm(jointCFit,jointCFit1, jointCFit2)
+```
+
+## Compare parameters of the longitudinal model
+```{r }
+long.beta <-    fixef(jointFit)
+long.beta1 <-   fixef(jointFit1)
+long.beta2 <-   fixef(jointFit2)
+long.Cbeta <-   fixef(jointCFit)
+long.Cbeta1 <-  fixef(jointCFit1)
+long.Cbeta2 <-  fixef(jointCFit2)
+long.beta
+long.beta1
+long.beta2
+long.Cbeta
+long.Cbeta1
+long.Cbeta2
+```
+
+
+## random effects survival model
+```{r }
+re.surv <- ranef(jointFit)[,1]
+re.surv1 <- ranef(jointFit1)[,1]
+re.surv2 <- ranef(jointFit2)[,1]
+re.Csurv <- ranef(jointCFit)[,1]
+re.Csurv1 <- ranef(jointCFit1)[,1]
+re.Csurv2 <- ranef(jointCFit2)[,1]
+```
+
+## random effects longitudinal model
+```{r }
+re.long <- ranef(jointFit)[,2]
+re.long1 <- ranef(jointFit1)[,2]
+re.long2 <- ranef(jointFit2)[,2]
+re.Clong <- ranef(jointCFit)[,2]
+re.Clong1 <- ranef(jointCFit1)[,2]
+re.Clong2 <- ranef(jointCFit2)[,2]
+```
+
+### traceplots (scroll with left and right arrow)
+```{r }
+traceplt <- ggtraceplot(jointFit)
+traceplt1 <- ggtraceplot(jointFit1)
+traceplt2 <- ggtraceplot(jointFit2)
+```
+## ADJUSTED
+```{r }
+traceplt
+traceplt1
+traceplt2
+```
+##CRUDE
+```{r }
+traceCplt <- ggtraceplot(jointCFit)
+traceCplt1 <- ggtraceplot(jointCFit1)
+traceCplt2 <- ggtraceplot(jointCFit2)
+traceCplt
+traceCplt1
+traceCplt2
+```
+
+### density plots (scroll with left and right arrow)
+```{r }
+densplt <- ggdensityplot(jointFit)
+densplt1 <- ggdensityplot(jointFit1)
+densplt2 <- ggdensityplot(jointFit2)
+```
+## ADJUSTED
+```{r }
+densplt
+densplt1
+densplt2
+```
+## CRUDE
+```{r }
+densCplt <- ggdensityplot(jointCFit)
+densCplt1 <- ggdensityplot(jointCFit1)
+densCplt2 <- ggdensityplot(jointCFit2)
+densCplt
+densCplt1
+densCplt2
+```
+# Save analyses
+```{r }
+name <- paste("C:/Documenti/Manenti/LES/JOHNS HOPKINS/jm_analysis_sle_lowc3", format(as.Date(Sys.Date() - 1), "%d.%m.%Y"), ".RData", sep = "")
+save.image(name)
+```
